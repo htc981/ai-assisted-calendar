@@ -1,0 +1,269 @@
+# ============================================================
+# AI-Assisted Calendar - .gitignore
+# ============================================================
+
+# ------------------------------------------------------------
+# Python / Backend
+# ------------------------------------------------------------
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Virtual environment
+venv/
+ENV/
+env/
+.venv
+
+# IDE
+.idea/
+*.iml
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# ------------------------------------------------------------
+# Node.js / Frontend
+# ------------------------------------------------------------
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Build outputs
+dist/
+dist-ssr/
+*.local
+
+# Vite
+*.local
+
+# Test coverage
+coverage/
+*.lcov
+
+# npm runtime files
+.npm
+
+# ------------------------------------------------------------
+# Environment Variables (IMPORTANT!)
+# ------------------------------------------------------------
+# Backend
+backend/.env
+backend/.env.local
+backend/.env.*.local
+
+# Frontend
+frontend/.env
+frontend/.env.local
+frontend/.env.*.local
+frontend/.env.production.local
+
+# Root
+.env
+.env.local
+.env.*.local
+
+# ------------------------------------------------------------
+# IDE / Editor
+# ------------------------------------------------------------
+# VS Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# JetBrains IDEs (PyCharm, WebStorm, etc.)
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+
+# ------------------------------------------------------------
+# OS Files
+# ------------------------------------------------------------
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.fuse_hidden*
+.Trash-*
+.nfs*
+
+# ------------------------------------------------------------
+# Database
+# ------------------------------------------------------------
+# Local database files (if using SQLite for testing)
+*.db
+*.sqlite
+*.sqlite3
+
+# MySQL dumps (if accidentally created)
+*.sql.dump
+*.sql.gz
+
+# ------------------------------------------------------------
+# Logs
+# ------------------------------------------------------------
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ------------------------------------------------------------
+# Build & Deployment
+# ------------------------------------------------------------
+# Build outputs
+build/
+out/
+*.tar.gz
+*.zip
+
+# Cache
+.cache/
+.parcel-cache/
+.eslintcache
+.stylelintcache
+
+# ------------------------------------------------------------
+# Temporary Files
+# ------------------------------------------------------------
+tmp/
+temp/
+.tmp/
+.tmp/
+
+# ------------------------------------------------------------
+# Secrets & Credentials
+# ------------------------------------------------------------
+# API keys (never commit these!)
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# SSH keys
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
+
+# ------------------------------------------------------------
+# Documentation
+# ------------------------------------------------------------
+# Generated documentation (if using auto-generation)
+docs/_build/
+site/
+
+# ------------------------------------------------------------
+# AI Coding Assistants
+# ------------------------------------------------------------
+# Qwen Code
+.qwen/
+QWEN.md
+
+# Claude Code
+.claude/
+CLAUDE.md
+claude-*.md
+
+# GitHub Copilot
+.copilot/
+
+# Cursor
+.cursor/
+.cursorrules
+
+# Other AI assistants
+*.ai.md
+ai-context.md
+
+# ------------------------------------------------------------
+# Miscellaneous
+# ------------------------------------------------------------
+# Lock files (keep package-lock.json and requirements.txt)
+# But ignore these:
+package-lock.json.local
+yarn.lock.local
+
+# Test artifacts
+*.orig
+*.bak
+*.retry
+
+# Backup files
+*.backup
+*.bck
