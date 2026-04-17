@@ -13,12 +13,12 @@ class Settings(BaseSettings):
     # JWT
     JWT_SECRET_KEY: str = "secret-key"
     JWT_ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 360
 
     # OpenAI
     OPENAI_API_KEY: str = ""
     OPENAI_BASE_URL: str = "https://api.openai.com/v1"
-    OPENAI_MODEL: str = "gpt-4o-mini"
+    OPENAI_MODEL: str = "gpt-5.4-mini"
 
     # CORS
     CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000"

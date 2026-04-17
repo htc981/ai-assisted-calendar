@@ -7,6 +7,7 @@
 -- ============================================================
 SET FOREIGN_KEY_CHECKS = 0;
 DROP TABLE IF EXISTS Log;
+DROP TABLE IF EXISTS Notification;
 DROP TABLE IF EXISTS Participant;
 DROP TABLE IF EXISTS Event;
 DROP TABLE IF EXISTS User;
@@ -340,25 +341,25 @@ CREATE PROCEDURE sp_create_event(
 )
 BEGIN
     DECLARE v_status VARCHAR(20);
-    
+
     -- Determine status based on time fields
-    SET v_status = COALESCE(p_status, 
-        CASE WHEN p_start_time IS NOT NULL AND p_end_time IS NOT NULL 
+    SET v_status = COALESCE(p_status,
+        CASE WHEN p_start_time IS NOT NULL AND p_end_time IS NOT NULL
              THEN 'scheduled' ELSE 'unscheduled' END);
-    
+
     -- Validate priority
     IF p_priority IS NULL OR p_priority < 1 OR p_priority > 5 THEN
         SET p_priority = 3;
     END IF;
-    
+
     -- Insert event
-    INSERT INTO Event (creator_id, title, description, priority, start_time, end_time, 
+    INSERT INTO Event (creator_id, title, description, priority, start_time, end_time,
                        status, estimated_duration)
     VALUES (p_creator_id, p_title, p_description, p_priority, p_start_time, p_end_time,
             v_status, p_estimated_duration);
-    
+
     SET p_event_id = LAST_INSERT_ID();
-    
+
     -- Add creator as organizer participant
     INSERT INTO Participant (user_id, event_id, role, response)
     VALUES (p_creator_id, p_event_id, 'organizer', 'accepted');
@@ -376,17 +377,24 @@ BEGIN
     DECLARE v_event_exists INTEGER;
     DECLARE v_user_exists INTEGER;
     DECLARE v_already_participant INTEGER;
-    
+    DECLARE v_event_title VARCHAR(200);
+    DECLARE v_creator_id INTEGER;
+
     -- Check if event exists
     SELECT COUNT(*) INTO v_event_exists FROM Event WHERE event_id = p_event_id;
-    
+
+    IF v_event_exists > 0 THEN
+        -- Get event title and creator_id for notification
+        SELECT title, creator_id INTO v_event_title, v_creator_id FROM Event WHERE event_id = p_event_id;
+    END IF;
+
     -- Check if user exists
     SELECT COUNT(*) INTO v_user_exists FROM User WHERE user_id = p_user_id;
-    
+
     -- Check if already a participant
-    SELECT COUNT(*) INTO v_already_participant FROM Participant 
+    SELECT COUNT(*) INTO v_already_participant FROM Participant
     WHERE event_id = p_event_id AND user_id = p_user_id;
-    
+
     IF v_event_exists = 0 THEN
         SET p_success = FALSE;
         SET p_message = 'Event does not exist';
@@ -402,18 +410,19 @@ BEGIN
             SET p_role = 'required';
         END IF;
 
-        -- Add participant
+        -- Add participant with pending response
         INSERT INTO Participant (user_id, event_id, role, response)
         VALUES (p_user_id, p_event_id, p_role, 'pending');
 
         -- Create notification for the participant
-        CALL sp_create_notification(
+        INSERT INTO Notification (user_id, from_user_id, event_id, notification_type, message, is_read)
+        VALUES (
             p_user_id,
-            p_creator_id,
+            v_creator_id,
             p_event_id,
             'invitation',
-            CONCAT('You have been invited to "', (SELECT title FROM Event WHERE event_id = p_event_id), '"'),
-            @notif_id
+            CONCAT('You have been invited to "', v_event_title, '"'),
+            FALSE
         );
 
         SET p_success = TRUE;
@@ -431,11 +440,12 @@ CREATE PROCEDURE sp_update_participant_response(
 )
 BEGIN
     DECLARE v_exists INTEGER;
-    
+    DECLARE v_notification_id INTEGER;
+
     -- Check if participant exists
-    SELECT COUNT(*) INTO v_exists FROM Participant 
+    SELECT COUNT(*) INTO v_exists FROM Participant
     WHERE event_id = p_event_id AND user_id = p_user_id;
-    
+
     IF v_exists = 0 THEN
         SET p_success = FALSE;
         SET p_message = 'Participant not found for this event';
@@ -443,10 +453,24 @@ BEGIN
         SET p_success = FALSE;
         SET p_message = 'Invalid response value';
     ELSE
-        UPDATE Participant 
+        UPDATE Participant
         SET response = p_response
         WHERE event_id = p_event_id AND user_id = p_user_id;
-        
+
+        -- If response is tentative, clear action_taken to move back to mailbox
+        IF p_response = 'tentative' THEN
+            SELECT notification_id INTO v_notification_id
+            FROM Notification
+            WHERE event_id = p_event_id AND user_id = p_user_id AND notification_type = 'invitation'
+            ORDER BY created_at DESC LIMIT 1;
+
+            IF v_notification_id IS NOT NULL THEN
+                UPDATE Notification
+                SET is_read = 1, action_taken = NULL
+                WHERE notification_id = v_notification_id;
+            END IF;
+        END IF;
+
         SET p_success = TRUE;
         SET p_message = 'Response updated successfully';
     END IF;
@@ -462,15 +486,15 @@ CREATE PROCEDURE sp_remove_participant(
 BEGIN
     DECLARE v_exists INTEGER;
     DECLARE v_is_creator INTEGER;
-    
+
     -- Check if participant exists
-    SELECT COUNT(*) INTO v_exists FROM Participant 
+    SELECT COUNT(*) INTO v_exists FROM Participant
     WHERE event_id = p_event_id AND user_id = p_user_id;
-    
+
     -- Check if trying to remove creator
-    SELECT COUNT(*) INTO v_is_creator FROM Event 
+    SELECT COUNT(*) INTO v_is_creator FROM Event
     WHERE event_id = p_event_id AND creator_id = p_user_id;
-    
+
     IF v_exists = 0 THEN
         SET p_success = FALSE;
         SET p_message = 'Participant not found for this event';
@@ -478,9 +502,14 @@ BEGIN
         SET p_success = FALSE;
         SET p_message = 'Cannot remove the event creator';
     ELSE
-        DELETE FROM Participant 
+        -- Remove participant
+        DELETE FROM Participant
         WHERE event_id = p_event_id AND user_id = p_user_id;
-        
+
+        -- Remove invitation from mailbox
+        DELETE FROM Notification
+        WHERE event_id = p_event_id AND user_id = p_user_id AND notification_type = 'invitation';
+
         SET p_success = TRUE;
         SET p_message = 'Participant removed successfully';
     END IF;
@@ -605,6 +634,7 @@ CREATE PROCEDURE sp_update_event(
     IN p_start_time DATETIME,
     IN p_end_time DATETIME,
     IN p_status VARCHAR(20),
+    IN p_estimated_duration INTEGER,
     OUT p_success BOOLEAN,
     OUT p_message VARCHAR(255)
 )
@@ -703,7 +733,8 @@ BEGIN
                     priority = COALESCE(p_priority, priority),
                     start_time = p_start_time,
                     end_time = p_end_time,
-                    status = COALESCE(p_status, status)
+                    status = COALESCE(p_status, status),
+                    estimated_duration = COALESCE(p_estimated_duration, estimated_duration)
                 WHERE event_id = p_event_id;
 
                 SET p_success = TRUE;
@@ -718,7 +749,8 @@ BEGIN
             priority = COALESCE(p_priority, priority),
             start_time = p_start_time,  -- Allow NULL to unschedule
             end_time = p_end_time,      -- Allow NULL to unschedule
-            status = COALESCE(p_status, status)
+            status = COALESCE(p_status, status),
+            estimated_duration = COALESCE(p_estimated_duration, estimated_duration)
         WHERE event_id = p_event_id;
 
         SET p_success = TRUE;

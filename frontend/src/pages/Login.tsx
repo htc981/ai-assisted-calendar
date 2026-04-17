@@ -31,8 +31,14 @@ export default function Login() {
       navigate('/');
     },
     onError: (error: any) => {
-      const message = error.response?.data?.detail || error.message;
-      if (error.response?.status === 401 || message?.includes('not found') || message?.includes('register')) {
+      const message = error?.response?.data?.detail || error?.message || '';
+      if (message?.includes('expired') || message?.includes('Invalid or expired token')) {
+        toast.error('Session expired. Please login again.');
+      } else if (error.message && error.message.includes('SESSION_EXPIRED')) {
+        toast.error('Session expired. Please login again.');
+      } else if (message?.includes('not found') || message?.includes('register')) {
+        toast.error('Account not found. Please register first.');
+      } else if (error?.response?.status === 401) {
         toast.error('Account not found. Please register first.');
       } else if (message) {
         toast.error(message);
@@ -50,8 +56,8 @@ export default function Login() {
       // Don't auto-login, let them login with credentials
     },
     onError: (error: any) => {
-      const message = error.response?.data?.detail;
-      if (error.response?.status === 409 || message?.includes('already')) {
+      const message = error?.response?.data?.detail || '';
+      if (error?.response?.status === 409 || message?.includes('already')) {
         toast.error('This email is already registered. Please login instead.');
       } else if (message) {
         toast.error(message);
@@ -63,14 +69,26 @@ export default function Login() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (isRegistering) {
       if (!name.trim()) {
         toast.error('Please enter your name');
         return;
       }
+      // Basic email format validation before sending to backend
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        toast.error('Please enter a valid email address (e.g., user@example.com)');
+        return;
+      }
       registerMutation.mutate({ name, email });
     } else {
+      // Basic email format validation before sending to backend
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        toast.error('Please enter a valid email address (e.g., user@example.com)');
+        return;
+      }
       loginMutation.mutate({ email, name: name || undefined });
     }
   };
@@ -93,7 +111,7 @@ export default function Login() {
               htmlFor="email"
               className="block text-sm font-medium text-gray-700 mb-1"
             >
-              Email
+              Email <span className="text-red-500">*</span>
             </label>
             <input
               id="email"

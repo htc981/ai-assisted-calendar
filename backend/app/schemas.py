@@ -155,6 +155,7 @@ class EventUpdate(BaseModel):
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
     status: Optional[EventStatus] = None
+    estimated_duration: Optional[int] = Field(default=None, ge=5)  # minutes
 
     @field_validator('start_time', 'end_time', mode='before')
     @classmethod

@@ -9,7 +9,7 @@ import type { Event } from '../types';
 interface TodoColumnProps {
   todos: Event[];
   isLoading: boolean;
-  onCreateTodo: (data: { title: string; description?: string; priority?: number }) => void;
+  onCreateTodo: (data: { title: string; description?: string; priority?: number; estimated_duration?: number }) => void;
   onEditTodo: (todo: Event) => void;
 }
 
@@ -19,6 +19,7 @@ export default function TodoColumn({ todos, isLoading, onCreateTodo, onEditTodo 
   const [newTitle, setNewTitle] = useState('');
   const [newDescription, setNewDescription] = useState('');
   const [newPriority, setNewPriority] = useState(3);
+  const [newEstimatedDuration, setNewEstimatedDuration] = useState(30);
 
   // Confirmation modal state
   const [confirmModal, setConfirmModal] = useState<{
@@ -43,7 +44,11 @@ export default function TodoColumn({ todos, isLoading, onCreateTodo, onEditTodo 
           },
           onError: (error: any) => {
             const message = error.response?.data?.detail;
-            if (error.response?.status === 401) {
+            if (
+              message?.includes('expired') ||
+              message?.includes('Invalid or expired token') ||
+              error.response?.status === 401
+            ) {
               toast.error('Session expired. Please login again.');
             } else if (error.response?.status === 404) {
               toast.success('Todo deleted (already removed)');
@@ -56,6 +61,8 @@ export default function TodoColumn({ todos, isLoading, onCreateTodo, onEditTodo 
               } else {
                 toast.error(message);
               }
+            } else if (error.message && error.message.includes('SESSION_EXPIRED')) {
+              toast.error('Session expired. Please login again.');
             } else {
               toast.error('Failed to delete todo. Please try again.');
             }
@@ -70,15 +77,22 @@ export default function TodoColumn({ todos, isLoading, onCreateTodo, onEditTodo 
     e.preventDefault();
     if (!newTitle.trim()) return;
 
-    onCreateTodo({
+    const todoData = {
       title: newTitle,
       description: newDescription || undefined,
       priority: newPriority,
+      estimated_duration: newEstimatedDuration,
+    };
+    console.log('[TodoColumn] Creating todo with data:', {
+      ...todoData,
+      creator: 'Current User' // User info available in parent component
     });
+    onCreateTodo(todoData);
 
     setNewTitle('');
     setNewDescription('');
     setNewPriority(3);
+    setNewEstimatedDuration(30);
     setIsCreating(false);
     toast.success('Todo created!');
   };
@@ -114,7 +128,8 @@ export default function TodoColumn({ todos, isLoading, onCreateTodo, onEditTodo 
               type="text"
               value={newTitle}
               onChange={(e) => setNewTitle(e.target.value)}
-              placeholder="Todo title"
+              placeholder="Todo title (required)"
+              required
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
               autoFocus
             />
@@ -125,6 +140,20 @@ export default function TodoColumn({ todos, isLoading, onCreateTodo, onEditTodo 
               rows={2}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm resize-none"
             />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Estimated Duration (minutes)
+              </label>
+              <input
+                type="number"
+                value={newEstimatedDuration}
+                onChange={(e) => setNewEstimatedDuration(parseInt(e.target.value) || 30)}
+                min="15"
+                max="480"
+                step="15"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
+              />
+            </div>
             <div className="flex items-center justify-between">
               <select
                 value={newPriority}

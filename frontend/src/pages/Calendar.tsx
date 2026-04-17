@@ -8,11 +8,13 @@ import { useAuthStore } from '../store/authStore';
 import { useUIStore } from '../store/uiStore';
 import { useEvents, useScheduleEvent, useCreateEvent, useCreateFromNL } from '../hooks/useEvents';
 import { useCurrentUser } from '../hooks/useAuth';
+import { usePendingInvitations, useHandleInvitationResponse } from '../hooks/useNotifications';
 import TodoColumn from '../components/TodoColumn';
 import EventModal from '../components/EventModal';
 import NLInputModal from '../components/NLInputModal';
 import AutoScheduleModal from '../components/AutoScheduleModal';
 import ConfirmModal from '../components/ConfirmModal';
+import MailboxModal from '../components/MailboxModal';
 import toast from 'react-hot-toast';
 import type { Event as CalendarEvent } from '../types';
 
@@ -34,6 +36,23 @@ export default function Calendar() {
 
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
   const calendarRef = useRef<CalendarApi>(null);
+  const [isMailboxOpen, setIsMailboxOpen] = useState(false);
+
+  const { data: pendingInvitations, isLoading: isInvitationsLoading, refetch: refetchInvitations } = usePendingInvitations();
+  const handleInvitationMutation = useHandleInvitationResponse();
+
+  // Calculate unactioned count (new or pending responses)
+  const unactionedCount = (pendingInvitations?.invitations || []).filter(
+    inv => !inv.participant_response || inv.participant_response === 'pending'
+  ).length;
+  
+  // If no unactioned invitations, show Maybe count
+  const maybeCount = (pendingInvitations?.invitations || []).filter(
+    inv => inv.participant_response === 'tentative'
+  ).length;
+  
+  const badgeCount = unactionedCount > 0 ? unactionedCount : maybeCount;
+  const isMaybeBadge = unactionedCount === 0 && maybeCount > 0;
 
   // Confirmation modal state
   const [confirmModal, setConfirmModal] = useState<{
@@ -64,9 +83,14 @@ export default function Calendar() {
   }, [currentUser, user, setUser]);
   
   // Filter selectedTodos to only include existing unscheduled events
-  const validSelectedTodos = selectedTodos.filter(id => 
+  const validSelectedTodos = selectedTodos.filter(id =>
     events.some(e => e.event_id === id && e.status === 'unscheduled')
-  );
+  ).sort((a, b) => {
+    // Sort by priority (lower number = higher priority = schedule first)
+    const priorityA = events.find(e => e.event_id === a)?.priority || 5;
+    const priorityB = events.find(e => e.event_id === b)?.priority || 5;
+    return priorityA - priorityB;
+  });
   
   const scheduleMutation = useScheduleEvent();
   const createMutation = useCreateEvent();
@@ -83,31 +107,98 @@ export default function Calendar() {
     return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
   };
 
-  // Helper function to schedule todos
-  const scheduleTodos = (startDate: Date, endDate: Date) => {
+  // Helper function to schedule todos sequentially
+  const scheduleTodos = (startDate: Date, endDate: Date | undefined) => {
     let scheduledCount = 0;
-    validSelectedTodos.forEach((eventId) => {
+    let currentIndex = 0;
+    let currentStart = startDate;  // Track current start time for sequential scheduling
+
+    // Collect creator names for all selected todos
+    const todoCreators = validSelectedTodos.map(id => {
+      const event = events.find(e => e.event_id === id);
+      const creator = event?.participants.find(p => p.role === 'organizer');
+      return { eventId: id, creatorName: creator?.user?.name || `User ${event?.creator_id}` };
+    });
+
+    console.log('[scheduleTodos] Starting with', {
+      startDate: startDate.toISOString(),
+      validSelectedTodos: validSelectedTodos.map(id => {
+        const event = events.find(e => e.event_id === id);
+        return { eventId: id, title: event?.title };
+      }),
+      todoCount: validSelectedTodos.length,
+      creators: todoCreators.map(c => ({ eventId: c.eventId, creatorName: c.creatorName }))
+    });
+
+    const scheduleNext = () => {
+      if (currentIndex >= validSelectedTodos.length) {
+        console.log('[scheduleTodos] All todos scheduled:', scheduledCount);
+        clearSelectedTodos();
+        return;
+      }
+
+      const eventId = validSelectedTodos[currentIndex];
       const event = events.find((e) => e.event_id === eventId);
       const duration = Math.max(30, event?.estimated_duration || 30);
+      
+      // Get creator name from participants
+      const creator = event?.participants.find(p => p.role === 'organizer');
+      const creatorName = creator?.user?.name || `User ${event?.creator_id}`;
 
-      const finalEndDate = endDate || new Date(startDate.getTime() + duration * 60 * 1000);
+      console.log(`[scheduleTodos] Scheduling todo ${currentIndex + 1}/${validSelectedTodos.length}:`, {
+        eventId,
+        title: event?.title,
+        creator: creatorName,
+        estimatedDuration: event?.estimated_duration,
+        calculatedDuration: duration,
+        currentStart: currentStart.toISOString()
+      });
+
+      // Determine the end time for this event
+      // If endDate is provided (from time slot selection), cap at that
+      // Otherwise, use start + duration
+      let finalEndDate: Date;
+      if (endDate) {
+        // Cap at the provided end time if it falls before calculated end
+        const calculatedEnd = new Date(currentStart.getTime() + duration * 60 * 1000);
+        finalEndDate = calculatedEnd <= endDate ? calculatedEnd : endDate;
+      } else {
+        // No cap - just use start + duration
+        finalEndDate = new Date(currentStart.getTime() + duration * 60 * 1000);
+      }
+
+      console.log(`[scheduleTodos] Final time slot:`, {
+        start: formatDateTime(currentStart),
+        end: formatDateTime(finalEndDate),
+        durationMinutes: Math.floor((finalEndDate.getTime() - currentStart.getTime()) / 60000)
+      });
 
       scheduleMutation.mutate(
         {
           eventId,
           data: {
-            start_time: formatDateTime(startDate),
+            start_time: formatDateTime(currentStart),
             end_time: formatDateTime(finalEndDate),
           },
         },
         {
-          onSuccess: () => {
+          onSuccess: (response: any) => {
+            console.log(`[scheduleTodos] Scheduled event ${eventId} successfully`);
             scheduledCount++;
-            if (scheduledCount === validSelectedTodos.length) {
-              clearSelectedTodos();
-            }
+            currentIndex++;
+
+            // Schedule next event at the end of this event's time
+            currentStart = new Date(finalEndDate);
+            console.log(`[scheduleTodos] Next event starts at:`, currentStart.toISOString());
+            scheduleNext();
           },
           onError: (error: any) => {
+            // Check for session expired error
+            if (error.message === 'SESSION_EXPIRED' || error.message?.includes('SESSION_EXPIRED')) {
+              toast.error('Session expired. Please login again.');
+              return;
+            }
+
             const message = error.response?.data?.detail;
             if (message) {
               toast.error(message);
@@ -116,48 +207,76 @@ export default function Calendar() {
             } else {
               toast.error('Failed to schedule. Please try again.');
             }
+            // Continue with next event even if one fails
+            currentIndex++;
+            scheduleNext();
           },
         }
       );
-    });
+    };
+    
+    scheduleNext();
   };
 
-  // Helper function to schedule todos at clicked event's time
+  // Helper function to schedule todos at clicked event's time (sequentially)
   const scheduleTodosAtEvent = (clickedEvent: CalendarEvent) => {
     let scheduledCount = 0;
-    validSelectedTodos.forEach((eventId) => {
-      const todoEvent = events.find((e) => e.event_id === eventId);
+    let currentIndex = 0;
+    let cumulativeDuration = 0;
 
-      // Calculate duration from clicked event (in minutes), minimum 30
-      let duration = 30;
-      if (clickedEvent.start_time && clickedEvent.end_time) {
-        const durationMs = new Date(clickedEvent.end_time).getTime() - new Date(clickedEvent.start_time).getTime();
-        duration = Math.max(30, Math.floor(durationMs / 60000));
-      } else if (todoEvent?.estimated_duration) {
-        duration = Math.max(30, todoEvent.estimated_duration);
+    // Debug: console.log removed for testing
+
+    const scheduleNext = () => {
+      if (currentIndex >= validSelectedTodos.length) {
+        clearSelectedTodos();
+        return;
       }
 
-      const startDate = new Date(clickedEvent.start_time!);
-      const endDate = clickedEvent.end_time
-        ? new Date(clickedEvent.end_time)
-        : new Date(startDate.getTime() + duration * 60 * 1000);
+      const eventId = validSelectedTodos[currentIndex];
+      const todoEvent = events.find((e) => e.event_id === eventId);
+
+      // Calculate duration: priority is todo's estimated_duration, then clicked event's duration, minimum 30
+      let eventDuration = 30;
+      if (todoEvent?.estimated_duration) {
+        eventDuration = Math.max(30, todoEvent.estimated_duration);
+      } else if (clickedEvent.start_time && clickedEvent.end_time) {
+        const durationMs = new Date(clickedEvent.end_time).getTime() - new Date(clickedEvent.start_time).getTime();
+        eventDuration = Math.floor(durationMs / 60000);
+      }
+
+      // Calculate start/end for this event (sequential - no gap)
+      const baseStart = new Date(clickedEvent.start_time!);
+
+      // Start time is baseStart plus cumulative duration from previous events
+      const eventStart = new Date(baseStart.getTime() + cumulativeDuration * 60 * 1000);
+      const eventEnd = new Date(eventStart.getTime() + eventDuration * 60 * 1000);
+
+      // Debug: console.log removed for testing
 
       scheduleMutation.mutate(
         {
           eventId,
           data: {
-            start_time: formatDateTime(startDate),
-            end_time: formatDateTime(endDate),
+            start_time: formatDateTime(eventStart),
+            end_time: formatDateTime(eventEnd),
           },
         },
         {
           onSuccess: () => {
             scheduledCount++;
-            if (scheduledCount === validSelectedTodos.length) {
-              clearSelectedTodos();
-            }
+            currentIndex++;
+            // Add this event's duration to cumulative for next event
+            cumulativeDuration += eventDuration;
+            // Debug: console.log removed for testing
+            scheduleNext();
           },
           onError: (error: any) => {
+            // Check for session expired error
+            if (error.message === 'SESSION_EXPIRED' || error.message?.includes('SESSION_EXPIRED')) {
+              toast.error('Session expired. Please login again.');
+              return;
+            }
+
             const message = error.response?.data?.detail;
             if (message) {
               toast.error(message);
@@ -166,10 +285,16 @@ export default function Calendar() {
             } else {
               toast.error('Failed to schedule. Please try again.');
             }
+            // Continue with next event even if one fails - still advance cumulative duration
+            cumulativeDuration += eventDuration;
+            currentIndex++;
+            scheduleNext();
           },
         }
       );
-    });
+    };
+
+    scheduleNext();
   };
 
   // Transform events for FullCalendar
@@ -239,8 +364,8 @@ export default function Calendar() {
           type: 'danger',
           onConfirm: () => {
             const startDate = info.start;
-            const endDate = new Date(clickedStart.getTime() + 30 * 60 * 1000);
-            scheduleTodos(startDate, endDate);
+            // Don't pass an end date - let scheduleTodos determine end time based on duration
+            scheduleTodos(startDate, undefined);
             setConfirmModal(null);
           },
         });
@@ -255,8 +380,8 @@ export default function Calendar() {
         type: 'info',
         onConfirm: () => {
           const startDate = info.start;
-          const endDate = new Date(clickedStart.getTime() + 30 * 60 * 1000);
-          scheduleTodos(startDate, endDate);
+          // Don't pass an end date - let scheduleTodos determine end time based on duration
+          scheduleTodos(startDate, undefined);
           setConfirmModal(null);
         },
       });
@@ -280,14 +405,91 @@ export default function Calendar() {
         },
         onError: (error: any) => {
           const message = error.response?.data?.detail;
-          if (message) {
-            toast.error(message);
+          if (message?.includes('expired') || message?.includes('Invalid or expired token')) {
+            toast.error('Session expired. Please login again.');
           } else if (error.response?.status === 400) {
             toast.error('Could not parse the text. Please try a different description.');
+          } else if (error.message && error.message.includes('SESSION_EXPIRED')) {
+            toast.error('Session expired. Please login again.');
           } else {
             toast.error('Failed to create events. Please try again.');
           }
         },
+      }
+    );
+  };
+
+  // Mailbox handlers
+  const handleAcceptInvitation = (notificationId: number) => {
+    handleInvitationMutation.mutate(
+      { notificationId, response: 'accepted' },
+      {
+        onSuccess: (data: any) => {
+          toast.success(data.message || 'Invitation accepted!');
+          // Don't close mailbox - allow processing multiple invitations
+        },
+        onError: (error: any) => {
+          const message = error.response?.data?.detail;
+          if (message) {
+            if (message.includes('expired') || message.includes('Invalid or expired token')) {
+              toast.error('Session expired. Please login again.');
+            } else {
+              toast.error(message);
+            }
+          } else {
+            toast.error('Failed to accept invitation');
+          }
+        }
+      }
+    );
+  };
+
+  const handleDeclineInvitation = (notificationId: number) => {
+    handleInvitationMutation.mutate(
+      { notificationId, response: 'declined' },
+      {
+        onSuccess: (data: any) => {
+          toast.success(data.message || 'Invitation declined');
+          // Don't close mailbox - allow processing multiple invitations
+        },
+        onError: (error: any) => {
+          const message = error.response?.data?.detail;
+          if (message) {
+            if (message.includes('expired') || message.includes('Invalid or expired token')) {
+              toast.error('Session expired. Please login again.');
+            } else {
+              toast.error(message);
+            }
+          } else {
+            toast.error('Failed to decline invitation');
+          }
+        }
+      }
+    );
+  };
+
+  const handleTentativeInvitation = (notificationId: number) => {
+    handleInvitationMutation.mutate(
+      { notificationId, response: 'tentative' },
+      {
+        onSuccess: (data: any) => {
+          toast.success(data.message || 'Response set to Maybe');
+          // Don't close mailbox - allow processing multiple invitations
+          // Refetch to update the mailbox list
+          refetchInvitations();
+        },
+        onError: (error: any) => {
+          const message = error.response?.data?.detail;
+          if (message) {
+            if (message.includes('expired') || message.includes('Invalid or expired token')) {
+              toast.error('Session expired. Please login again.');
+            } else {
+              toast.error(message);
+            }
+          } else {
+            toast.error('Failed to update response');
+          }
+        }
       }
     );
   };
@@ -349,6 +551,22 @@ export default function Calendar() {
               <span>🤖</span>
               <span>Auto-Schedule ({validSelectedTodos.length})</span>
             </button>
+            <div className="relative">
+              <button
+                onClick={() => setIsMailboxOpen(true)}
+                className="px-3 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors flex items-center space-x-2"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+                <span>Inbox</span>
+                {badgeCount > 0 && (
+                  <span className={`absolute -top-1 -right-1 text-white text-xs font-bold px-2 py-0.5 rounded-full ${isMaybeBadge ? 'bg-yellow-500' : 'bg-red-500'}`}>
+                    {badgeCount}
+                  </span>
+                )}
+              </button>
+            </div>
             <div className="flex items-center space-x-2 text-sm text-gray-600">
               <span>{user?.name || currentUser?.name || 'Loading...'}</span>
               <button
@@ -400,9 +618,13 @@ export default function Calendar() {
           <TodoColumn
             todos={events.filter((e) => e.status === 'unscheduled')}
             isLoading={isLoading}
-            onCreateTodo={(data) =>
-              createMutation.mutate(data)
-            }
+            onCreateTodo={(data) => {
+              console.log('[createTodo] Creating todo:', {
+                ...data,
+                creator: user?.name || currentUser?.name
+              });
+              createMutation.mutate(data);
+            }}
             onEditTodo={(todo) => {
               setSelectedEvent(todo);
             }}
@@ -430,6 +652,17 @@ export default function Calendar() {
         <AutoScheduleModal
           onClose={() => setAutoScheduleOpen(false)}
           eventIds={validSelectedTodos}
+        />
+      )}
+
+      {isMailboxOpen && (
+        <MailboxModal
+          isOpen={isMailboxOpen}
+          onClose={() => setIsMailboxOpen(false)}
+          invitations={pendingInvitations?.invitations || []}
+          onAccept={handleAcceptInvitation}
+          onDecline={handleDeclineInvitation}
+          onMaybe={handleTentativeInvitation}
         />
       )}
 

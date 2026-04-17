@@ -59,8 +59,28 @@ export default function EventModal({ event, onClose }: EventModalProps) {
     priority: event.priority,
     start_time: event.start_time || '',
     end_time: event.end_time || '',
+    estimated_duration: event.estimated_duration || 30,
   });
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+  
+  // Local state for participants - syncs with server after mutations
+  const [participants, setParticipants] = useState(event.participants);
+
+  // Check if the event is currently scheduled
+  const isCurrentlyScheduled = event.status === 'scheduled' && event.start_time && event.end_time;
+  
+  // Check if time fields are being edited
+  const hasTimeChanges = editData.start_time && editData.end_time;
+  
+  // Store original values for revert
+  const [originalData, setOriginalData] = useState({
+    title: event.title,
+    description: event.description || '',
+    priority: event.priority,
+    start_time: event.start_time || '',
+    end_time: event.end_time || '',
+    estimated_duration: event.estimated_duration || 30,
+  });
 
   // Confirmation modal state
   const [confirmModal, setConfirmModal] = useState<{
@@ -73,21 +93,30 @@ export default function EventModal({ event, onClose }: EventModalProps) {
 
   const isCreator = user?.user_id === event.creator_id;
 
-  const handleSave = () => {
+  // Helper function to validate and prepare data before saving
+  const validateAndSave = () => {
     // Validate required fields
     if (!editData.title.trim()) {
       toast.error('Title is required');
-      return;
+      return false;
     }
 
-    // Validate time if event is scheduled
+    // Validate time if event is being scheduled or time is being changed
     if (editData.start_time && editData.end_time) {
       const start = new Date(editData.start_time);
       const end = new Date(editData.end_time);
       if (start >= end) {
         toast.error('End time must be after start time');
-        return;
+        return false;
       }
+    }
+
+    return true;
+  };
+
+  const handleSave = () => {
+    if (!validateAndSave()) {
+      return;
     }
 
     updateMutation.mutate(
@@ -96,16 +125,31 @@ export default function EventModal({ event, onClose }: EventModalProps) {
         onSuccess: () => {
           toast.success('Event updated successfully');
           setIsEditing(false);
+          // Reset editData to original values after successful save
+          setEditData({
+            title: originalData.title,
+            description: originalData.description,
+            priority: originalData.priority,
+            start_time: originalData.start_time,
+            end_time: originalData.end_time,
+            estimated_duration: originalData.estimated_duration,
+          });
         },
         onError: (error: any) => {
           const message = error.response?.data?.detail;
           if (message) {
-            toast.error(message);
+            if (message.includes('expired') || message.includes('Invalid or expired token')) {
+              toast.error('Session expired. Please login again.');
+            } else {
+              toast.error(message);
+            }
           } else if (error.response?.status === 404) {
             toast.error('Event not found');
           } else if (error.response?.status === 403) {
             toast.error('You do not have permission to edit this event');
           } else if (error.response?.status === 401) {
+            toast.error('Session expired. Please login again.');
+          } else if (error.message && error.message.includes('SESSION_EXPIRED')) {
             toast.error('Session expired. Please login again.');
           } else {
             toast.error('Failed to update event. Please try again.');
@@ -131,9 +175,15 @@ export default function EventModal({ event, onClose }: EventModalProps) {
           onError: (error: any) => {
             const message = error.response?.data?.detail;
             if (message) {
-              toast.error(message);
+              if (message.includes('expired') || message.includes('Invalid or expired token')) {
+                toast.error('Session expired. Please login again.');
+              } else {
+                toast.error(message);
+              }
             } else if (error.response?.status === 403) {
               toast.error('You do not have permission to cancel this event');
+            } else if (error.message && error.message.includes('SESSION_EXPIRED')) {
+              toast.error('Session expired. Please login again.');
             } else {
               toast.error('Failed to cancel event. Please try again.');
             }
@@ -160,11 +210,17 @@ export default function EventModal({ event, onClose }: EventModalProps) {
           onError: (error: any) => {
             const message = error.response?.data?.detail;
             if (message) {
-              toast.error(message);
+              if (message.includes('expired') || message.includes('Invalid or expired token')) {
+                toast.error('Session expired. Please login again.');
+              } else {
+                toast.error(message);
+              }
             } else if (error.response?.status === 404) {
               toast.error('Event not found - it may have been already deleted');
             } else if (error.response?.status === 403) {
               toast.error('You do not have permission to delete this event');
+            } else if (error.message && error.message.includes('SESSION_EXPIRED')) {
+              toast.error('Session expired. Please login again.');
             } else {
               toast.error('Failed to delete event. Please try again.');
             }
@@ -183,14 +239,35 @@ export default function EventModal({ event, onClose }: EventModalProps) {
       {
         onSuccess: () => {
           toast.success('Participant added successfully');
+          // Update local participants state
+          const newUser = users.find(u => u.user_id === selectedUserId);
+          if (newUser) {
+            setParticipants(prev => [...prev, {
+              user_id: selectedUserId,
+              event_id: event.event_id,
+              role: 'required',
+              response: 'pending',
+              created_at: new Date().toISOString(),
+              user: {
+                name: newUser.name,
+                email: newUser.email
+              }
+            }]);
+          }
           setSelectedUserId(null);
         },
         onError: (error: any) => {
           const message = error.response?.data?.detail;
           if (message) {
-            toast.error(message);
+            if (message.includes('expired') || message.includes('Invalid or expired token')) {
+              toast.error('Session expired. Please login again.');
+            } else {
+              toast.error(message);
+            }
           } else if (error.response?.status === 409) {
             toast.error('This user is already a participant');
+          } else if (error.message && error.message.includes('SESSION_EXPIRED')) {
+            toast.error('Session expired. Please login again.');
           } else {
             toast.error('Failed to add participant. Please try again.');
           }
@@ -211,7 +288,13 @@ export default function EventModal({ event, onClose }: EventModalProps) {
         onError: (error: any) => {
           const message = error.response?.data?.detail;
           if (message) {
-            toast.error(message);
+            if (message.includes('expired') || message.includes('Invalid or expired token')) {
+              toast.error('Session expired. Please login again.');
+            } else {
+              toast.error(message);
+            }
+          } else if (error.message && error.message.includes('SESSION_EXPIRED')) {
+            toast.error('Session expired. Please login again.');
           } else {
             toast.error('Failed to update response. Please try again.');
           }
@@ -224,11 +307,19 @@ export default function EventModal({ event, onClose }: EventModalProps) {
     removeParticipantMutation.mutate(userId, {
       onSuccess: () => {
         toast.success('Participant removed successfully');
+        // Update local participants state
+        setParticipants(prev => prev.filter(p => p.user_id !== userId));
       },
       onError: (error: any) => {
         const message = error.response?.data?.detail;
         if (message) {
-          toast.error(message);
+          if (message.includes('expired') || message.includes('Invalid or expired token')) {
+            toast.error('Session expired. Please login again.');
+          } else {
+            toast.error(message);
+          }
+        } else if (error.message && error.message.includes('SESSION_EXPIRED')) {
+          toast.error('Session expired. Please login again.');
         } else {
           toast.error('Failed to remove participant. Please try again.');
         }
@@ -257,7 +348,13 @@ export default function EventModal({ event, onClose }: EventModalProps) {
             onError: (error: any) => {
               const message = error.response?.data?.detail;
               if (message) {
-                toast.error(message);
+                if (message.includes('expired') || message.includes('Invalid or expired token')) {
+                  toast.error('Session expired. Please login again.');
+                } else {
+                  toast.error(message);
+                }
+              } else if (error.message && error.message.includes('SESSION_EXPIRED')) {
+                toast.error('Session expired. Please login again.');
               } else {
                 toast.error('Failed to unschedule event. Please try again.');
               }
@@ -346,13 +443,14 @@ export default function EventModal({ event, onClose }: EventModalProps) {
                   {isEditing ? (
                     <>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Title <span className="text-red-500">*</span></label>
                         <input
                           type="text"
                           value={editData.title}
                           onChange={(e) => setEditData({ ...editData, title: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                          placeholder="Event title"
+                          placeholder="Event title (required)"
+                          required
                         />
                       </div>
                       <div>
@@ -379,26 +477,46 @@ export default function EventModal({ event, onClose }: EventModalProps) {
                           <option value={5}>Priority 5 (Optional)</option>
                         </select>
                       </div>
-                      <div className="grid grid-cols-2 gap-3">
+                      {!isCurrentlyScheduled && (
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Estimated Duration (minutes)
+                          </label>
                           <input
-                            type="datetime-local"
-                            value={editData.start_time ? toLocalDateTimeValue(editData.start_time) : ''}
-                            onChange={(e) => setEditData({ ...editData, start_time: e.target.value ? toApiDateTime(e.target.value) : '' })}
+                            type="number"
+                            value={editData.estimated_duration || 30}
+                            onChange={(e) => setEditData({ ...editData, estimated_duration: parseInt(e.target.value) || 30 })}
+                            min="15"
+                            max="480"
+                            step="15"
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 text-sm"
                           />
                         </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">End Time</label>
-                          <input
-                            type="datetime-local"
-                            value={editData.end_time ? toLocalDateTimeValue(editData.end_time) : ''}
-                            onChange={(e) => setEditData({ ...editData, end_time: e.target.value ? toApiDateTime(e.target.value) : '' })}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 text-sm"
-                          />
-                        </div>
-                      </div>
+                      )}
+                      {isCurrentlyScheduled ? (
+                        <>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
+                              <input
+                                type="datetime-local"
+                                value={editData.start_time ? toLocalDateTimeValue(editData.start_time) : ''}
+                                onChange={(e) => setEditData({ ...editData, start_time: e.target.value ? toApiDateTime(e.target.value) : '' })}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 text-sm"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">End Time</label>
+                              <input
+                                type="datetime-local"
+                                value={editData.end_time ? toLocalDateTimeValue(editData.end_time) : ''}
+                                onChange={(e) => setEditData({ ...editData, end_time: e.target.value ? toApiDateTime(e.target.value) : '' })}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 text-sm"
+                              />
+                            </div>
+                          </div>
+                        </>
+                      ) : null}
                     </>
                   ) : (
                     <>
@@ -419,17 +537,19 @@ export default function EventModal({ event, onClose }: EventModalProps) {
                         <p className="text-sm text-gray-600">{event.description}</p>
                       )}
 
-                      <div className="text-sm text-gray-600">
-                        <div>
-                          <span className="font-medium">Start:</span> {formatDateTime(event.start_time)}
+                      {isCurrentlyScheduled && (
+                        <div className="text-sm text-gray-600">
+                          <div>
+                            <span className="font-medium">Start:</span> {formatDateTime(event.start_time)}
+                          </div>
+                          <div>
+                            <span className="font-medium">End:</span> {formatDateTime(event.end_time)}
+                          </div>
+                          <div>
+                            <span className="font-medium">Status:</span> {event.status}
+                          </div>
                         </div>
-                        <div>
-                          <span className="font-medium">End:</span> {formatDateTime(event.end_time)}
-                        </div>
-                        <div>
-                          <span className="font-medium">Status:</span> {event.status}
-                        </div>
-                      </div>
+                      )}
                     </>
                   )}
 
@@ -440,12 +560,21 @@ export default function EventModal({ event, onClose }: EventModalProps) {
                       {isEditing && <span className="text-xs text-gray-500 ml-2">(Click Remove to delete)</span>}
                     </h4>
                     <div className="space-y-2 max-h-40 overflow-auto">
-                      {event.participants.map((p) => {
+                      {participants
+                        .sort((a, b) => {
+                          // Organizer first, then sort by role, then by name
+                          if (a.role === 'organizer') return -1;
+                          if (b.role === 'organizer') return 1;
+                          return a.role.localeCompare(b.role) || 
+                                 (users.find(u => u.user_id === a.user_id)?.name || '')
+                                   .localeCompare(users.find(u => u.user_id === b.user_id)?.name || '');
+                        })
+                        .map((p) => {
                         // Find user info for this participant
                         const participantUser = users.find(u => u.user_id === p.user_id);
                         const displayName = participantUser?.name || 'Unknown';
                         const displayEmail = participantUser?.email || '';
-                        
+
                         return (
                           <div key={p.user_id} className="flex items-center justify-between text-sm">
                             <div className="flex items-center space-x-2">
@@ -481,7 +610,7 @@ export default function EventModal({ event, onClose }: EventModalProps) {
                         >
                           <option value="">Select user...</option>
                           {users
-                            .filter((u) => !event.participants.find((p) => p.user_id === u.user_id))
+                            .filter((u) => !participants.find((p) => p.user_id === u.user_id))
                             .map((u) => (
                               <option key={u.user_id} value={u.user_id}>
                                 {u.name} ({u.email})
@@ -538,7 +667,17 @@ export default function EventModal({ event, onClose }: EventModalProps) {
                             Save
                           </button>
                           <button
-                            onClick={() => setIsEditing(false)}
+                            onClick={() => {
+                              setIsEditing(false);
+                              // Reset editData to original values when discarding
+                              setEditData({
+                                title: originalData.title,
+                                description: originalData.description,
+                                priority: originalData.priority,
+                                start_time: originalData.start_time,
+                                end_time: originalData.end_time,
+                              });
+                            }}
                             className="px-4 py-2 text-gray-600 hover:text-gray-800"
                           >
                             Discard

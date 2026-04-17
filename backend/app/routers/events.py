@@ -50,6 +50,13 @@ def list_events(
         FROM Event e
         INNER JOIN Participant p ON e.event_id = p.event_id
         WHERE p.user_id = :user_id
+          AND (
+            -- Creator can see all their events
+            e.creator_id = :user_id
+            OR
+            -- Participant can only see accepted events
+            (e.creator_id != :user_id AND p.response = 'accepted')
+          )
     """)
     params = {"user_id": user_id}
 
@@ -75,17 +82,19 @@ def list_events(
 
 def get_event_with_participants(event, db: Session) -> EventWithParticipants:
     """Fetch event with participants."""
-    # Get participants
+    # Get participants with user info
     p_result = db.execute(
         text("""
-        SELECT user_id, event_id, role, response, created_at
-        FROM Participant
-        WHERE event_id = :event_id
+        SELECT p.user_id, p.event_id, p.role, p.response, p.created_at,
+               u.name, u.email
+        FROM Participant p
+        LEFT JOIN User u ON p.user_id = u.user_id
+        WHERE p.event_id = :event_id
         """),
         {"event_id": event.event_id}
     )
     participants = p_result.fetchall()
-    
+
     return EventWithParticipants(
         event_id=event.event_id,
         creator_id=event.creator_id,
@@ -104,7 +113,11 @@ def get_event_with_participants(event, db: Session) -> EventWithParticipants:
                 "event_id": p.event_id,
                 "role": p.role,
                 "response": p.response,
-                "created_at": p.created_at
+                "created_at": p.created_at,
+                "user": {
+                    "name": p.name,
+                    "email": p.email
+                } if p.name else None
             }
             for p in participants
         ]
@@ -155,7 +168,6 @@ def create_event(
     db: Session = Depends(get_db),
     user_id: int = Depends(get_current_user_id)
 ):
-    print("Creating event with data:", event_data)  # Debug log
     """Create a new event/todo."""
     # Call stored procedure
     result = db.execute(
@@ -180,8 +192,6 @@ def create_event(
     # Get the created event ID BEFORE committing
     result = db.execute(text("SELECT @event_id AS event_id"))
     event_id = result.fetchone().event_id
-
-    print("Created event ID:", event_id)  # Debug log
 
     # Add participants if provided
     for participant_id in event_data.participant_ids or []:
@@ -230,7 +240,8 @@ def update_event(
         text("""
         CALL sp_update_event(
             :event_id, :title, :description, :priority,
-            :start_time, :end_time, :status, @success, @message
+            :start_time, :end_time, :status, :estimated_duration,
+            @success, @message
         )
         """),
         {
@@ -240,7 +251,8 @@ def update_event(
             "priority": event_data.priority,
             "start_time": event_data.start_time,
             "end_time": event_data.end_time,
-            "status": event_data.status.value if event_data.status else None
+            "status": event_data.status.value if event_data.status else None,
+            "estimated_duration": event_data.estimated_duration
         }
     )
 

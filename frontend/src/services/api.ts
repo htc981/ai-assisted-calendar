@@ -29,32 +29,43 @@ const api = axios.create({
 });
 
 // Add auth token to requests
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
   }
-  return config;
-});
+);
 
-// Handle auth errors
+// Add response interceptor to handle auth expiration
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    // Only clear storage and reload if we have a stored token that became invalid
-    // Don't do this for login/register requests (401 is expected for invalid credentials)
-    // Also check if the token in the request header matches what's in storage
-    const requestToken = error.config?.headers?.Authorization?.replace('Bearer ', '');
     const storedToken = localStorage.getItem('token');
-    
+
     // If token was rejected and it matches what we have in storage, the token has expired
-    if (error.response?.status === 401 && storedToken && (!requestToken || requestToken === storedToken)) {
+    if (
+      storedToken &&
+      error.response?.status === 401 &&
+      (error.response?.data?.detail?.includes('expired') ||
+        error.response?.data?.detail?.includes('Invalid or expired token'))
+    ) {
       console.warn('Auth token expired, clearing auth and redirecting to login');
       localStorage.removeItem('token');
       localStorage.removeItem('user');
-      // Don't reload immediately - let the app handle redirect
+
+      // Dispatch event to notify app
       window.dispatchEvent(new CustomEvent('auth-expired'));
+
+      // Return a rejected promise with a special error to prevent further handling
+      return Promise.reject(new Error('SESSION_EXPIRED'));
     }
+
     return Promise.reject(error);
   }
 );

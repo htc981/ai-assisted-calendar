@@ -38,9 +38,19 @@ export default function AutoScheduleModal({ onClose, eventIds }: AutoScheduleMod
         break;
     }
 
+    // Format as MySQL datetime (local time, not UTC)
+    const formatAsMySQLDatetime = (date: Date): string => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      return `${year}-${month}-${day} ${hours}:${minutes}:00`;
+    };
+
     return {
-      start: start.toISOString(),
-      end: end.toISOString(),
+      start: formatAsMySQLDatetime(start),
+      end: formatAsMySQLDatetime(end),
     };
   };
 
@@ -61,10 +71,12 @@ export default function AutoScheduleModal({ onClose, eventIds }: AutoScheduleMod
         },
         onError: (error: any) => {
           const message = error.response?.data?.detail;
-          if (message) {
-            toast.error(message);
+          if (message?.includes('expired') || message?.includes('Invalid or expired token')) {
+            toast.error('Session expired. Please login again.');
           } else if (error.response?.status === 409) {
             toast.error('Could not find available time slots. Try a wider date range.');
+          } else if (error.message && error.message.includes('SESSION_EXPIRED')) {
+            toast.error('Session expired. Please login again.');
           } else {
             toast.error('Failed to schedule events. Please try again.');
           }

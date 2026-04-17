@@ -3,6 +3,7 @@ import { useAuthStore } from './store/authStore';
 import { useEffect } from 'react';
 import Login from './pages/Login';
 import Calendar from './pages/Calendar';
+import toast from 'react-hot-toast';
 
 function App() {
   const { isAuthenticated, isInitialized, logout } = useAuthStore();
@@ -11,6 +12,7 @@ function App() {
   // Listen for auth expiration events
   useEffect(() => {
     const handleAuthExpired = () => {
+      toast.error('Session expired. Please login again.');
       logout();
       navigate('/login', { replace: true });
     };
@@ -18,6 +20,15 @@ function App() {
     window.addEventListener('auth-expired', handleAuthExpired);
     return () => window.removeEventListener('auth-expired', handleAuthExpired);
   }, [logout, navigate]);
+
+  // Update page title when expired
+  useEffect(() => {
+    if (!isAuthenticated) {
+      document.title = 'Login - AI-Assisted Calendar';
+    } else {
+      document.title = 'Calendar - AI-Assisted Calendar';
+    }
+  }, [isAuthenticated]);
 
   // Don't render until auth state is determined
   if (!isInitialized) {
