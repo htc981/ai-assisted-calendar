@@ -162,10 +162,7 @@ calendar/
 │
 ├── scripts/
 │   ├── init_db.sh               # Database initialization (requires root)
-│   ├── test_db.sh               # Run database test cases
-│   ├── schema.sql               # Full database schema (1090 lines)
-│   ├── seed_data.sql            # Sample data for testing
-│   └── test_db_cases.sql        # SQL-level test cases
+│   └── schema.sql               # Full database schema
 │
 ├── assets/
 │   ├── erd-diagram.png          # Entity relationship diagram
@@ -205,9 +202,6 @@ mysql -u root -p -e "GRANT SYSTEM_USER ON *.* TO 'calendar_user'@'%';"
 mysql -u root -p -e "GRANT SYSTEM_USER ON *.* TO 'calendar_user'@'localhost';"
 mysql -u root -p -e "SET GLOBAL log_bin_trust_function_creators = 1;"
 mysql -u root -p calendar < scripts/schema.sql
-
-# Optional: Load sample data
-mysql -u calendar_user -p calendar < scripts/seed_data.sql
 ```
 
 ### 2. Backend Setup
@@ -528,12 +522,6 @@ Log (
 cd backend
 source venv/bin/activate
 pytest tests/ -v
-```
-
-### Database Tests
-```bash
-chmod +x scripts/test_db.sh
-./scripts/test_db.sh
 ```
 
 ### Frontend Tests

@@ -1081,9 +1081,3 @@ FROM Event e
 LEFT JOIN Participant p ON e.event_id = p.event_id
 WHERE e.status = 'unscheduled'
 GROUP BY e.event_id;
-
--- ============================================================
--- SAMPLE DATA (for testing) - Optional, skip if re-running
--- ============================================================
--- To add sample data manually, run:
--- mysql -u calendar_user -p calendar < scripts/seed_data.sql
