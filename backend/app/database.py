@@ -1,7 +1,10 @@
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, Session
 from contextlib import contextmanager
+import logging
 from .config import settings
+
+logger = logging.getLogger(__name__)
 
 # Create engine with connection pool
 engine = create_engine(
@@ -44,7 +47,7 @@ def init_db():
     try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
-        print("Database connection successful!")
+        logger.info("Database connection successful")
     except Exception as e:
-        print(f"Database connection failed: {e}")
+        logger.exception("Database connection failed: %s", e)
         raise

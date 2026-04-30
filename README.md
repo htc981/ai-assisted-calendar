@@ -171,11 +171,7 @@ calendar/
 │   ├── erd-diagram.png          # Entity relationship diagram
 │   └── erdplus.png              # ERD from ERDPlus
 │
-├── README.md                    # This file
-├── requirements.md              # Product requirements (PRD)
-├── ai-features.md               # AI features specification
-├── project-plan.md              # Development plan & timeline
-└── TEST_CASES.md                # Comprehensive test cases
+└── README.md                    # This file
 ```
 
 ---
@@ -196,7 +192,8 @@ calendar/
 ```bash
 # Option A: Run initialization script (recommended)
 chmod +x scripts/init_db.sh
-export MYSQL_ROOT_PASSWORD=your_root_password
+export DB_PASSWORD=your_strong_password
+# Make sure it satisfies MySQL password policy (e.g., 12+ chars with upper/lowercase, number, symbol)
 ./scripts/init_db.sh
 
 # Option B: Manual setup
@@ -520,7 +517,7 @@ Log (
 | `OPENAI_BASE_URL` | OpenAI API base URL | https://api.openai.com/v1 |
 | `OPENAI_MODEL` | OpenAI model | gpt-5.4-mini |
 | `CORS_ORIGINS` | Allowed origins | http://localhost:5173,http://localhost:3000 |
-| `DEBUG` | Debug mode | True |
+| `DEBUG` | Debug mode | False |
 
 ---
 
@@ -587,10 +584,6 @@ npm test
 
 ## 📚 Documentation
 
-- [Product Requirements (PRD)](requirements.md)
-- [AI Features Specification](ai-features.md)
-- [Project Plan](project-plan.md)
-- [Test Cases](TEST_CASES.md)
 - [ERD Diagram](assets/erd-diagram.png)
 
 ---

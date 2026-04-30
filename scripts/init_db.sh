@@ -10,7 +10,7 @@ DB_HOST="${DB_HOST:-localhost}"
 DB_PORT="${DB_PORT:-3306}"
 DB_NAME="${DB_NAME:-calendar}"
 DB_USER="${DB_USER:-calendar_user}"
-DB_PASSWORD="${DB_PASSWORD:-Calendar_Pass_2026!}"
+DB_PASSWORD="${DB_PASSWORD:-}"
 
 echo "========================================"
 echo "AI-Assisted Calendar - Database Setup"
@@ -20,6 +20,13 @@ echo ""
 # Check if MySQL client is available
 if ! command -v mysql &> /dev/null; then
     echo "ERROR: MySQL client not found. Please install mysql-client."
+    exit 1
+fi
+
+if [ -z "$DB_PASSWORD" ]; then
+    echo "ERROR: DB_PASSWORD is not set."
+    echo "Set a strong password before running, for example:"
+    echo "  export DB_PASSWORD='your-strong-password'"
     exit 1
 fi
 
@@ -34,13 +41,27 @@ echo "  ✓ Database created"
 
 # Step 2: Create user and grant privileges
 echo "Step 2: Creating user '$DB_USER' and granting privileges..."
-sudo mysql -h "$DB_HOST" -P "$DB_PORT" -u root -e "
+if ! STEP2_OUTPUT=$(sudo mysql -h "$DB_HOST" -P "$DB_PORT" -u root -e "
     CREATE USER IF NOT EXISTS '$DB_USER'@'%' IDENTIFIED BY '$DB_PASSWORD';
     CREATE USER IF NOT EXISTS '$DB_USER'@'localhost' IDENTIFIED BY '$DB_PASSWORD';
     GRANT ALL PRIVILEGES ON $DB_NAME.* TO '$DB_USER'@'%';
     GRANT ALL PRIVILEGES ON $DB_NAME.* TO '$DB_USER'@'localhost';
     FLUSH PRIVILEGES;
-"
+" 2>&1); then
+    echo "$STEP2_OUTPUT"
+    if echo "$STEP2_OUTPUT" | grep -q "ERROR 1819"; then
+        echo ""
+        echo "ERROR: Password rejected by MySQL validate_password policy."
+        echo "Use a stronger password and rerun."
+        echo "Recommended format: at least 12 chars with upper/lowercase letters, numbers, and symbols."
+        echo "Example:"
+        echo "  export DB_PASSWORD='Cal2026!Strong#Pass'"
+        echo ""
+        echo "To inspect current policy:"
+        echo "  sudo mysql -u root -e \"SHOW VARIABLES LIKE 'validate_password%';\""
+    fi
+    exit 1
+fi
 echo "  ✓ User created and privileges granted"
 
 # Step 3: Enable function creation
@@ -85,7 +106,7 @@ echo "Connection details:"
 echo "  Host:     $DB_HOST:$DB_PORT"
 echo "  Database: $DB_NAME"
 echo "  User:     $DB_USER"
-echo "  Password: $DB_PASSWORD"
+echo "  Password: <hidden>"
 echo ""
 echo "Test connection:"
 echo "  mysql -u $DB_USER -p$DB_PASSWORD $DB_NAME"

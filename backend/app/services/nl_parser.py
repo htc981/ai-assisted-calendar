@@ -7,9 +7,12 @@ Uses OpenAI to parse free-form text into structured event objects.
 import json
 import re
 from typing import List, Optional
+import logging
 from openai import OpenAI
 from ..config import settings
 from ..schemas import ParsedEvent
+
+logger = logging.getLogger(__name__)
 
 
 # Prompt for LLM to parse natural language into events
@@ -216,7 +219,12 @@ def parse_natural_language(text: str) -> List[ParsedEvent]:
 
         except Exception as e:
             last_error = e
-            print(f"[NL Parser] Attempt {attempt + 1}/{max_retries} failed: {e}")
+            logger.warning(
+                "NL parser attempt %d/%d failed: %s",
+                attempt + 1,
+                max_retries,
+                e,
+            )
             if attempt < max_retries - 1:
                 import time
                 time.sleep(0.5 * (attempt + 1))  # Exponential backoff

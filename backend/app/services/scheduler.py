@@ -6,11 +6,14 @@ Provides both LLM-based and deterministic scheduling.
 
 from datetime import datetime
 from typing import List, Tuple, Optional, Dict, Any
+import logging
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from ..schemas import AutoScheduleResponse
 from ..config import settings
 import re
+
+logger = logging.getLogger(__name__)
 
 
 def auto_schedule_events(
@@ -39,7 +42,7 @@ def auto_schedule_events(
                 return result
     except Exception as e:
         # Log error and fall back to deterministic
-        print(f"[Scheduler] LLM scheduling failed: {e}, falling back to deterministic")
+        logger.warning("LLM scheduling failed; falling back to deterministic: %s", e)
     
     # Fall back to deterministic scheduling
     return auto_schedule_deterministic(
@@ -140,7 +143,18 @@ Time range: {range_start} to {range_end}
 Return JSON with scheduled times for each event. Higher priority (lower number) events get preferred slots.
 Avoid conflicts with existing commitments.
 Consider event descriptions when scheduling (e.g., "morning meeting" should be in the morning).
-Format: {{"schedules": [{{"event_id": 1, "start": "2026-04-17 14:00:00", "end": "2026-04-17 14:30:00"}}]}}"""
+Return the result as exactly one markdown fenced JSON block:
+```json
+{{
+  "schedules": [
+    {{
+      "event_id": 1,
+      "start": "2026-04-17 14:00:00",
+      "end": "2026-04-17 14:30:00"
+    }}
+  ]
+}}
+```"""
 
         # Retry mechanism for LLM call + re-parse loop
         max_retries = 3
@@ -151,7 +165,7 @@ Format: {{"schedules": [{{"event_id": 1, "start": "2026-04-17 14:00:00", "end": 
                 response = client.chat.completions.create(
                     model=settings.OPENAI_MODEL,
                     messages=[
-                        {"role": "system", "content": "You are a helpful scheduling assistant. Return only valid JSON."},
+                        {"role": "system", "content": "You are a helpful scheduling assistant. Return exactly one markdown fenced json block."},
                         {"role": "user", "content": prompt}
                     ],
                     temperature=0.3,
@@ -161,15 +175,21 @@ Format: {{"schedules": [{{"event_id": 1, "start": "2026-04-17 14:00:00", "end": 
                 # Parse LLM response
                 content = response.choices[0].message.content.strip()
 
-                print(f"[Scheduler LLM] Attempt {attempt + 1}: {content[:100]}...")
-
-                # Extract JSON from response
-                json_match = re.search(r'\{{[\s\S]*\}}', content)
-                if not json_match:
-                    raise Exception("No JSON found in LLM response")
+                logger.debug("Scheduler LLM attempt %d response prefix: %s", attempt + 1, content[:100])
 
                 import json
-                schedule_data = json.loads(json_match.group())
+                # Prefer fenced JSON block (same strategy as NL parser), then fallback.
+                try:
+                    schedule_data = json.loads(content)
+                except json.JSONDecodeError:
+                    json_match = re.search(r'```json\s*(.*?)\s*```', content, re.DOTALL)
+                    if json_match:
+                        schedule_data = json.loads(json_match.group(1))
+                    else:
+                        json_match = re.search(r'\{[\s\S]*\}', content)
+                        if not json_match:
+                            raise Exception("No JSON found in LLM response")
+                        schedule_data = json.loads(json_match.group())
 
                 if "schedules" not in schedule_data:
                     raise Exception("No 'schedules' key in LLM response")
@@ -214,18 +234,23 @@ Format: {{"schedules": [{{"event_id": 1, "start": "2026-04-17 14:00:00", "end": 
 
             except Exception as e:
                 last_error = e
-                print(f"[Scheduler LLM] Attempt {attempt + 1}/{max_retries} failed: {e}")
+                logger.warning(
+                    "Scheduler LLM attempt %d/%d failed: %s",
+                    attempt + 1,
+                    max_retries,
+                    e,
+                )
                 if attempt < max_retries - 1:
                     import time
                     time.sleep(0.5 * (attempt + 1))  # Exponential backoff
                 continue
 
         # All retries failed
-        print(f"[Scheduler LLM] All {max_retries} attempts failed: {last_error}")
+        logger.error("Scheduler LLM failed after %d attempts: %s", max_retries, last_error)
         return None
 
     except Exception as e:
-        print(f"[Scheduler] LLM scheduling error: {e}")
+        logger.exception("Scheduler LLM unexpected error: %s", e)
         return None
 
 

@@ -120,9 +120,7 @@ export const eventsAPI = {
   },
 
   createEvent: async (data: EventCreateRequest): Promise<Event> => {
-    console.log('[API] Creating event:', data);
     const response = await api.post('/api/events', data);
-    console.log('[API] Event created:', response.data);
     return response.data;
   },
 

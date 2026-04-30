@@ -235,6 +235,10 @@ site/
 .qwen/
 QWEN.md
 
+# Codex
+.codex
+AGENTS.md
+
 # Claude Code
 .claude/
 CLAUDE.md

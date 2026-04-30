@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useUIStore } from '../store/uiStore';
 import TodoItem from './TodoItem';
-import { useUpdateEvent, useDeleteEvent } from '../hooks/useEvents';
+import { useDeleteEvent } from '../hooks/useEvents';
 import ConfirmModal from './ConfirmModal';
 import toast from 'react-hot-toast';
 import type { Event } from '../types';
@@ -83,10 +83,6 @@ export default function TodoColumn({ todos, isLoading, onCreateTodo, onEditTodo 
       priority: newPriority,
       estimated_duration: newEstimatedDuration,
     };
-    console.log('[TodoColumn] Creating todo with data:', {
-      ...todoData,
-      creator: 'Current User' // User info available in parent component
-    });
     onCreateTodo(todoData);
 
     setNewTitle('');
@@ -95,14 +91,6 @@ export default function TodoColumn({ todos, isLoading, onCreateTodo, onEditTodo 
     setNewEstimatedDuration(30);
     setIsCreating(false);
     toast.success('Todo created!');
-  };
-
-  const priorityColors = {
-    1: 'bg-red-100 text-red-800',
-    2: 'bg-orange-100 text-orange-800',
-    3: 'bg-blue-100 text-blue-800',
-    4: 'bg-green-100 text-green-800',
-    5: 'bg-gray-100 text-gray-800',
   };
 
   return (

@@ -26,7 +26,6 @@ export default function Calendar() {
     isAutoScheduleOpen,
     isNLInputOpen,
     viewMode,
-    toggleTodo,
     clearSelectedTodos,
     setSelectedEvent,
     setAutoScheduleOpen,
@@ -34,11 +33,10 @@ export default function Calendar() {
     setViewMode,
   } = useUIStore();
 
-  const [dateRange, setDateRange] = useState({ start: '', end: '' });
   const calendarRef = useRef<CalendarApi>(null);
   const [isMailboxOpen, setIsMailboxOpen] = useState(false);
 
-  const { data: pendingInvitations, isLoading: isInvitationsLoading, refetch: refetchInvitations } = usePendingInvitations();
+  const { data: pendingInvitations, refetch: refetchInvitations } = usePendingInvitations();
   const handleInvitationMutation = useHandleInvitationResponse();
 
   // Calculate unactioned count (new or pending responses)
@@ -72,8 +70,8 @@ export default function Calendar() {
     }
   };
 
-  const { data: events = [], isLoading, refetch } = useEvents();
-  const { data: currentUser, error: userError, isLoading: userLoading } = useCurrentUser();
+  const { data: events = [], isLoading } = useEvents();
+  const { data: currentUser } = useCurrentUser();
   
   // Store user in Zustand when fetched (using useEffect to avoid render-time updates)
   useEffect(() => {
@@ -109,30 +107,11 @@ export default function Calendar() {
 
   // Helper function to schedule todos sequentially
   const scheduleTodos = (startDate: Date, endDate: Date | undefined) => {
-    let scheduledCount = 0;
     let currentIndex = 0;
     let currentStart = startDate;  // Track current start time for sequential scheduling
 
-    // Collect creator names for all selected todos
-    const todoCreators = validSelectedTodos.map(id => {
-      const event = events.find(e => e.event_id === id);
-      const creator = event?.participants.find(p => p.role === 'organizer');
-      return { eventId: id, creatorName: creator?.user?.name || `User ${event?.creator_id}` };
-    });
-
-    console.log('[scheduleTodos] Starting with', {
-      startDate: startDate.toISOString(),
-      validSelectedTodos: validSelectedTodos.map(id => {
-        const event = events.find(e => e.event_id === id);
-        return { eventId: id, title: event?.title };
-      }),
-      todoCount: validSelectedTodos.length,
-      creators: todoCreators.map(c => ({ eventId: c.eventId, creatorName: c.creatorName }))
-    });
-
     const scheduleNext = () => {
       if (currentIndex >= validSelectedTodos.length) {
-        console.log('[scheduleTodos] All todos scheduled:', scheduledCount);
         clearSelectedTodos();
         return;
       }
@@ -140,19 +119,6 @@ export default function Calendar() {
       const eventId = validSelectedTodos[currentIndex];
       const event = events.find((e) => e.event_id === eventId);
       const duration = Math.max(30, event?.estimated_duration || 30);
-      
-      // Get creator name from participants
-      const creator = event?.participants.find(p => p.role === 'organizer');
-      const creatorName = creator?.user?.name || `User ${event?.creator_id}`;
-
-      console.log(`[scheduleTodos] Scheduling todo ${currentIndex + 1}/${validSelectedTodos.length}:`, {
-        eventId,
-        title: event?.title,
-        creator: creatorName,
-        estimatedDuration: event?.estimated_duration,
-        calculatedDuration: duration,
-        currentStart: currentStart.toISOString()
-      });
 
       // Determine the end time for this event
       // If endDate is provided (from time slot selection), cap at that
@@ -167,12 +133,6 @@ export default function Calendar() {
         finalEndDate = new Date(currentStart.getTime() + duration * 60 * 1000);
       }
 
-      console.log(`[scheduleTodos] Final time slot:`, {
-        start: formatDateTime(currentStart),
-        end: formatDateTime(finalEndDate),
-        durationMinutes: Math.floor((finalEndDate.getTime() - currentStart.getTime()) / 60000)
-      });
-
       scheduleMutation.mutate(
         {
           eventId,
@@ -182,14 +142,11 @@ export default function Calendar() {
           },
         },
         {
-          onSuccess: (response: any) => {
-            console.log(`[scheduleTodos] Scheduled event ${eventId} successfully`);
-            scheduledCount++;
+          onSuccess: () => {
             currentIndex++;
 
             // Schedule next event at the end of this event's time
             currentStart = new Date(finalEndDate);
-            console.log(`[scheduleTodos] Next event starts at:`, currentStart.toISOString());
             scheduleNext();
           },
           onError: (error: any) => {
@@ -220,11 +177,8 @@ export default function Calendar() {
 
   // Helper function to schedule todos at clicked event's time (sequentially)
   const scheduleTodosAtEvent = (clickedEvent: CalendarEvent) => {
-    let scheduledCount = 0;
     let currentIndex = 0;
     let cumulativeDuration = 0;
-
-    // Debug: console.log removed for testing
 
     const scheduleNext = () => {
       if (currentIndex >= validSelectedTodos.length) {
@@ -251,8 +205,6 @@ export default function Calendar() {
       const eventStart = new Date(baseStart.getTime() + cumulativeDuration * 60 * 1000);
       const eventEnd = new Date(eventStart.getTime() + eventDuration * 60 * 1000);
 
-      // Debug: console.log removed for testing
-
       scheduleMutation.mutate(
         {
           eventId,
@@ -263,11 +215,9 @@ export default function Calendar() {
         },
         {
           onSuccess: () => {
-            scheduledCount++;
             currentIndex++;
             // Add this event's duration to cumulative for next event
             cumulativeDuration += eventDuration;
-            // Debug: console.log removed for testing
             scheduleNext();
           },
           onError: (error: any) => {
@@ -619,10 +569,6 @@ export default function Calendar() {
             todos={events.filter((e) => e.status === 'unscheduled')}
             isLoading={isLoading}
             onCreateTodo={(data) => {
-              console.log('[createTodo] Creating todo:', {
-                ...data,
-                creator: user?.name || currentUser?.name
-              });
               createMutation.mutate(data);
             }}
             onEditTodo={(todo) => {
