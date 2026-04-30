@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI-Assisted Calendar | System Demo</title>
+    <style>
+      :root {
+        --bg: #f5f8fc;
+        --card: #ffffff;
+        --ink: #17223b;
+        --sub: #50607a;
+        --line: #dbe3ee;
+        --accent: #0f7b6c;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+        color: var(--ink);
+        background: linear-gradient(160deg, #f9fbff 0%, #eef4fc 100%);
+      }
+      .wrap {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 2rem 1.25rem 3rem;
+      }
+      .hero {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 1.5rem;
+        margin-bottom: 1.25rem;
+        box-shadow: 0 10px 24px rgba(15, 30, 60, 0.06);
+      }
+      .badge {
+        display: inline-block;
+        padding: 0.35rem 0.7rem;
+        border-radius: 999px;
+        background: #e8f7f4;
+        color: var(--accent);
+        font-weight: 600;
+        font-size: 0.78rem;
+        letter-spacing: 0.02em;
+        margin-bottom: 0.8rem;
+      }
+      h1 {
+        margin: 0 0 0.6rem;
+        font-size: clamp(1.6rem, 3.5vw, 2.3rem);
+      }
+      p {
+        margin: 0;
+        color: var(--sub);
+        line-height: 1.5;
+      }
+      .grid {
+        display: grid;
+        gap: 1.25rem;
+        grid-template-columns: 1.6fr 1fr;
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 1rem;
+        box-shadow: 0 10px 24px rgba(15, 30, 60, 0.06);
+      }
+      h2 {
+        font-size: 1.05rem;
+        margin: 0 0 0.75rem;
+      }
+      video {
+        width: 100%;
+        height: auto;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        background: #0a111f;
+      }
+      .note {
+        margin-top: 0.65rem;
+        font-size: 0.9rem;
+      }
+      ul {
+        margin: 0.35rem 0 0;
+        padding-left: 1.1rem;
+      }
+      li {
+        margin: 0.4rem 0;
+        color: var(--sub);
+      }
+      code {
+        background: #f0f4fa;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 0.1rem 0.35rem;
+      }
+      footer {
+        margin-top: 1rem;
+        font-size: 0.86rem;
+        color: #6c7890;
+      }
+      @media (max-width: 900px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <section class="hero">
+        <div class="badge">System Demo</div>
+        <h1>AI-Assisted Calendar</h1>
+        <p>
+          This page showcases the project demo video first, with a brief introduction to the platform architecture and
+          scheduling workflow.
+        </p>
+      </section>
+
+      <section class="grid">
+        <article class="card">
+          <h2>Demo Video</h2>
+          <video controls preload="metadata" poster="">
+            <source src="video/system-demo.mp4" type="video/mp4" />
+            Your browser does not support the video tag.
+          </video>
+        </article>
+
+        <aside class="card">
+          <h2>Project Snapshot</h2>
+          <ul>
+            <li>FastAPI backend + MySQL stored-procedure rule engine</li>
+            <li>React + TypeScript calendar/todo dual-pane workflow</li>
+            <li>Natural-language event creation and AI-assisted scheduling</li>
+            <li>Priority-aware conflict handling and invitation mailbox</li>
+          </ul>
+        </aside>
+      </section>
+
+    </main>
+  </body>
+</html>
